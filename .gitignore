@@ -1,0 +1,5 @@
+photos/
+*.task
+*.app
+.DS_Store
+__pycache__/
