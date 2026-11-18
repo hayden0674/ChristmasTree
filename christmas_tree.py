@@ -18,6 +18,18 @@ if _sys.platform == 'win32':
         except Exception:
             pass
 _orig_pg_scale = pygame.transform.scale
+def _read_mp_model_bytes(mp_path):
+    if isinstance(mp_path, (bytes, bytearray)):
+        return bytes(mp_path)
+    import os, sys
+    cand = str(mp_path)
+    if not os.path.exists(cand) and hasattr(sys, "_MEIPASS"):
+        alt = os.path.join(sys._MEIPASS, os.path.basename(cand))
+        if os.path.exists(alt):
+            cand = alt
+    with open(cand, "rb") as f:
+        return f.read()
+
 def _hd_pg_scale(surface, size, dest_surface=None):
     if dest_surface is None and surface.get_bitsize() in (24, 32):
         try:
