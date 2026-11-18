@@ -85,7 +85,7 @@ HAND_CONNECTIONS = [
 
 def convert_heic_in_folder(folder):
     """自动将文件夹内的苹果 .heic/.HEIC 照片转换为 .jpg"""
-    if not os.path.isdir(folder):
+    if sys.platform != "darwin" or not os.path.isdir(folder):
         return
     for fname in os.listdir(folder):
         if fname.lower().endswith(".heic"):
@@ -167,8 +167,12 @@ class HandTracker:
             from mediapipe.tasks import python as mp_python
             from mediapipe.tasks.python import vision as mp_vision
 
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            model_path = os.path.join(script_dir, "hand_landmarker.task")
+            bundle_dir = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+            model_path = os.path.join(bundle_dir, "hand_landmarker.task")
+            if not os.path.exists(model_path):
+                d_dir = os.path.expanduser("~/Desktop/ChristmasTree_Data")
+                os.makedirs(d_dir, exist_ok=True)
+                model_path = os.path.join(d_dir, "hand_landmarker.task")
 
             if not os.path.exists(model_path) or os.path.getsize(model_path) < 100000:
                 url = (
@@ -1012,6 +1016,22 @@ def scale_color(color, factor):
 
 
 def import_photos_via_dialog(target_dir):
+    if sys.platform != "darwin":
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            r = tk.Tk(); r.withdraw()
+            paths = filedialog.askopenfilenames(title="Select Photos", filetypes=[("Images", "*.jpg *.jpeg *.png *.webp *.bmp")])
+            r.destroy()
+            cnt = 0; os.makedirs(target_dir, exist_ok=True)
+            for s in paths:
+                if os.path.isfile(s):
+                    d = os.path.join(target_dir, os.path.basename(s))
+                    if os.path.abspath(s) != os.path.abspath(d): shutil.copy2(s, d)
+                    cnt += 1
+            return cnt
+        except Exception:
+            return 0
     """调用 macOS 原生文件选择窗口导入照片（自动转换 HEIC）"""
     script = (
         'set chosenFiles to choose file of type {"public.image"} '

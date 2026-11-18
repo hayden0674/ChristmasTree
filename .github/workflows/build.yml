@@ -1,0 +1,41 @@
+name: Build Windows and macOS Apps
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+          - os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install dependencies
+        run: pip install pygame opencv-python mediapipe pyinstaller
+      - name: Download hand model
+        run: curl -L -o hand_landmarker.task https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task
+      - name: Build Windows EXE
+        if: runner.os == "Windows"
+        run: |
+          pyinstaller --noconfirm --onefile --windowed --name "ParticleChristmasTree" --add-data "hand_landmarker.task;." christmas_tree.py
+          powershell Compress-Archive -Path dist/ParticleChristmasTree.exe -DestinationPath ChristmasTree-Windows.zip
+      - name: Build macOS APP
+        if: runner.os == "macOS"
+        run: |
+          pyinstaller --noconfirm --onedir --windowed --name "ParticleChristmasTree" --add-data "hand_landmarker.task:." christmas_tree.py
+          ditto -c -k --sequesterRsrc --keepParent dist/ParticleChristmasTree.app ChristmasTree-macOS.zip
+      - name: Publish to Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.0
+          name: 3D Particle Christmas Tree v1.0.0
+          files: ChristmasTree-*.zip
