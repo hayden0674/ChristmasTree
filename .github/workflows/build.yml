@@ -26,12 +26,13 @@ jobs:
       - name: Build Windows EXE
         if: runner.os == "Windows"
         run: |
-          pyinstaller --noconfirm --onefile --windowed --name "ParticleChristmasTree" --add-data "hand_landmarker.task;." christmas_tree.py
+          pyinstaller --noconfirm --onefile --windowed --collect-all mediapipe --name "ParticleChristmasTree" --add-data "hand_landmarker.task;." christmas_tree.py
           powershell Compress-Archive -Path dist/ParticleChristmasTree.exe -DestinationPath ChristmasTree-Windows.zip
       - name: Build macOS APP
         if: runner.os == "macOS"
         run: |
-          pyinstaller --noconfirm --onedir --windowed --name "ParticleChristmasTree" --add-data "hand_landmarker.task:." christmas_tree.py
+          pyinstaller --noconfirm --onedir --windowed --collect-all mediapipe --name "ParticleChristmasTree" --add-data "hand_landmarker.task:." christmas_tree.py
+          plutil -insert NSCameraUsageDescription -string "Used for real-time hand gesture control." dist/ParticleChristmasTree.app/Contents/Info.plist
           ditto -c -k --sequesterRsrc --keepParent dist/ParticleChristmasTree.app ChristmasTree-macOS.zip
       - name: Publish to Releases
         uses: softprops/action-gh-release@v2
