@@ -7,6 +7,20 @@ import subprocess
 import sys
 import urllib.request
 import pygame
+import os
+_orig_sysfont = pygame.font.SysFont
+def _safe_sysfont(name, size, bold=False, italic=False, constructor=None):
+    try:
+        return _orig_sysfont(name, size, bold=bold, italic=italic, constructor=constructor)
+    except Exception:
+        for fp in ('C:/Windows/Fonts/msyh.ttc', 'C:/Windows/Fonts/simhei.ttf', 'C:/Windows/Fonts/segoeui.ttf', 'C:/Windows/Fonts/arial.ttf'):
+            if os.path.exists(fp):
+                try:
+                    return pygame.font.Font(fp, size)
+                except Exception:
+                    pass
+        return pygame.font.Font(None, size)
+pygame.font.SysFont = _safe_sysfont
 
 try:
     import cv2
