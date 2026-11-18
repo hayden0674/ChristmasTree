@@ -209,8 +209,13 @@ class HandTracker:
         return ((d_mid + d_idx + d_pnk) / 3.0) * 0.65 + d_width * 0.35
 
     def _classify_single_hand(self, pts, currently_pinching=False):
-        palm_scale = math.hypot(pts[9].x - pts[0].x, pts[9].y - pts[0].y) + 1e-5
-        pinch_dist = math.hypot(pts[4].x - pts[8].x, pts[4].y - pts[8].y) / palm_scale
+        ref_scale = max(
+            math.hypot(pts[9].x - pts[0].x, pts[9].y - pts[0].y),
+            math.hypot(pts[5].x - pts[17].x, pts[5].y - pts[17].y),
+            math.hypot(pts[5].x - pts[0].x, pts[5].y - pts[0].y),
+            1e-5,
+        )
+        pinch_dist = math.hypot(pts[4].x - pts[8].x, pts[4].y - pts[8].y) / ref_scale
 
         finger_specs = [
             (8, 6, 5),
@@ -229,17 +234,33 @@ class HandTracker:
 
         extended_4 = sum(ext_flags)
         other_3_ext = sum(ext_flags[1:])
-        thumb_spread = math.hypot(pts[4].x - pts[17].x, pts[4].y - pts[17].y) / palm_scale
+        thumb_spread = math.hypot(pts[4].x - pts[17].x, pts[4].y - pts[17].y) / ref_scale
+        idx_mid_gap = math.hypot(pts[8].x - pts[12].x, pts[8].y - pts[12].y) / ref_scale
 
-        pinch_threshold = 0.50 if currently_pinching else 0.41
-        if pinch_dist < pinch_threshold and (other_3_ext >= 1 or currently_pinching):
-            return "PINCH", 1.35
+        d_idx_wrist = math.hypot(pts[8].x - pts[0].x, pts[8].y - pts[0].y)
+        d_idx_pip_wrist = math.hypot(pts[6].x - pts[0].x, pts[6].y - pts[0].y)
+        d_idx_mcp = math.hypot(pts[5].x - pts[0].x, pts[5].y - pts[0].y)
+        idx_out = (d_idx_wrist > d_idx_mcp * 1.12) and (d_idx_wrist > d_idx_pip_wrist * 0.96)
+        idx_tucked = d_idx_wrist <= d_idx_mcp * 1.08
 
-        if extended_4 >= 4 or (extended_4 == 3 and thumb_spread > 0.90):
+        # 1. 握拳最高优先级：四指收拢且食指缩回掌心时，立即打断捏合锁定并切为 FIST
+        if extended_4 == 0 and idx_tucked and idx_mid_gap < 0.36:
+            return "FIST", 1.35
+
+        # 2. 捏合判定：不再用 currently_pinching 强行锁定，必须满足拇指食指探出捏合形态
+        pinch_threshold = 0.50 if currently_pinching else 0.45
+        is_open_pinch = other_3_ext >= 1
+        is_curled_pinch = (idx_mid_gap >= 0.35) and idx_out and (thumb_spread >= 0.58)
+        if pinch_dist < pinch_threshold and (is_open_pinch or is_curled_pinch):
+            return "PINCH", 1.40
+
+        # 3. 张开五指散开星海
+        if extended_4 >= 4 or (extended_4 == 3 and thumb_spread > 0.88):
             return "OPEN", 1.30
 
-        if extended_4 == 0 and thumb_spread < 0.95:
-            return "FIST", 1.15
+        # 4. 常规握拳兜底
+        if extended_4 == 0 and thumb_spread < 0.92 and idx_mid_gap < 0.40:
+            return "FIST", 1.20
 
         return "NEUTRAL", 0.50
 
@@ -1288,46 +1309,47 @@ def main():
 
             pinch_now = tracker.hand_detected and (tracker.gesture == "PINCH")
 
-            if hand_streak >= 3:
+            if hand_streak >= 2:
                 if tracker.gesture == "OPEN":
                     target_scatter = 1.0
                     grabbed_uid = None
                     grabbed_surf = None
+                    prev_pinch_active = False
                     rot_vel += tracker.swipe_vx * 0.72
 
                     norm_near = max(0.0, min(1.0, (tracker.hand_size - 0.10) / (0.33 - 0.10)))
                     target_cloud_spread = 1.72 - norm_near * (1.72 - 0.42)
 
                 elif tracker.gesture == "PINCH":
-                    if gallery.has_photos and not prev_pinch_active:
+                    if gallery.has_photos and (not prev_pinch_active or grabbed_surf is None):
                         uid, surf = gallery.next_unique_photo()
                         if surf is not None:
                             grabbed_uid = uid
                             grabbed_surf = surf
-                            zoom_blend = 0.15
+                            zoom_blend = max(zoom_blend, 0.15)
+                            prev_pinch_active = True
                     photo_hold_timer = 0.0
 
                 elif tracker.gesture == "FIST":
-                    if scatter > 0.15 or grabbed_uid is not None:
-                        target_scatter = 0.0
-                        target_cloud_spread = 1.0
-                        grabbed_uid = None
-                        grabbed_surf = None
+                    target_scatter = 0.0
+                    target_cloud_spread = 1.0
+                    grabbed_uid = None
+                    grabbed_surf = None
+                    prev_pinch_active = False
 
                 target_tilt = base_tilt_x + (tracker.palm_y - 0.5) * 0.28 * scatter
             else:
                 target_tilt = base_tilt_x
-                if grabbed_uid is not None:
-                    photo_hold_timer += dt
-                    if photo_hold_timer >= 3.0 or no_hand_duration >= 2.0:
-                        grabbed_uid = None
-                        grabbed_surf = None
-
                 if no_hand_duration >= 2.0:
                     target_scatter = 0.0
                     target_cloud_spread = 1.0
 
-            prev_pinch_active = pinch_now
+            if not pinch_now:
+                photo_hold_timer += dt
+                if photo_hold_timer >= 0.24:
+                    grabbed_uid = None
+                    grabbed_surf = None
+                    prev_pinch_active = False
 
         scatter += (target_scatter - scatter) * min(1.0, dt * 4.2)
         cloud_spread += (target_cloud_spread - cloud_spread) * min(1.0, dt * 4.5)
@@ -1653,10 +1675,17 @@ def main():
             target_h = int(base_h * anim_scale)
 
             if target_w > 10 and target_h > 10:
+                theme_col = THEMES[theme_idx].get("text", THEMES[theme_idx].get("core", (255, 190, 225)))
+                frame_glow_col = (
+                    min(255, int(theme_col[0] * 0.72 + 255 * 0.28)),
+                    min(255, int(theme_col[1] * 0.72 + 255 * 0.28)),
+                    min(255, int(theme_col[2] * 0.72 + 255 * 0.28)),
+                    int(105 * zoom_blend),
+                )
                 glow_box = pygame.Surface((target_w + 36, target_h + 36), pygame.SRCALPHA)
                 pygame.draw.rect(
                     glow_box,
-                    (255, 190, 225, int(95 * zoom_blend)),
+                    frame_glow_col,
                     (0, 0, target_w + 36, target_h + 36),
                     border_radius=18,
                 )
@@ -1679,7 +1708,7 @@ def main():
         if show_cam_preview and tracker.cam_enabled and tracker.preview_surface is not None:
             box_x, box_y = 22, height - 178
             pw, ph = tracker.preview_surface.get_size()
-            pygame.draw.rect(screen, (255, 185, 220), (box_x - 2, box_y - 2, pw + 4, ph + 4), 2, border_radius=6)
+            pygame.draw.rect(screen, THEMES[theme_idx].get("text", (255, 185, 220)), (box_x - 2, box_y - 2, pw + 4, ph + 4), 2, border_radius=6)
             screen.blit(tracker.preview_surface, (box_x, box_y))
 
             if not intro_finished:
@@ -1687,7 +1716,8 @@ def main():
             elif not tracker.ai_ready:
                 label = tracker.status_msg
             else:
-                pinch_hint = f"PINCH: Photo ({len(gallery.unique_surfs)})" if gallery.has_photos else "PINCH: No Photos"
+                mode_tag = "Starfield" if scatter > 0.5 else "Tree"
+                pinch_hint = f"PINCH ({mode_tag}): Photo ({len(gallery.unique_surfs)})" if gallery.has_photos else "PINCH: No Photos"
                 status_map = {
                     "OPEN": f"OPEN: Spread {cloud_spread:.2f}x",
                     "PINCH": pinch_hint,

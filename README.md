@@ -32,7 +32,8 @@
 
 ### 3. 隔空手势与快捷键说明
 - **张开五指 (Open Palm)**：圣诞树散开成 3D 星海（手离摄像头越近星海越聚拢，越远越开阔）。
-- **拇指 + 食指捏合 (Pinch)**：从星海中抓取并放大查看一张照片。
+- **张开手掌捏合 (Open Palm + Pinch)**：保持中指、无名指、小指张开的同时捏合拇指与食指，粒子保持 **3D 星海散开状态**并抓取放大一张照片。
+- **握拳捏合 (Fist + Pinch)**：保持中指、无名指、小指握拳收拢的同时捏合拇指与食指，粒子保持 **圣诞树聚合状态**并在树前抓取放大一张照片。
 - **握拳 (Fist)**：所有星光与照片重新聚合成圣诞树。
 - **快捷键**：`P` 添加照片 | `Space` 切换 3 套主题 | `F` 放烟花 | `R` 重播开场 | `Tab` 切换全屏/窗口 | `V` 摄像头调试窗 | `ESC` 退出。
 
@@ -60,6 +61,7 @@ An interactive **3D Particle Christmas Tree** controlled by real-time hand gestu
 
 ### 3. Gesture & Keyboard Controls
 - **Open Palm**: Scatter the tree into a 3D starfield (move hand closer/farther to adjust density).
-- **Pinch (Thumb + Index)**: Grab and zoom in on a unique polaroid photo.
+- **Open-Palm Pinch**: Pinch thumb + index while keeping the other 3 fingers extended to zoom in on a photo **while keeping the starfield scattered**.
+- **Fist Pinch**: Pinch thumb + index while keeping the other 3 fingers curled to zoom in on a photo **while keeping the Christmas tree assembled**.
 - **Fist**: Reassemble particles back into the Christmas tree.
 - **Shortcuts**: `P` (add photos) | `Space` (switch themes) | `F` (fireworks) | `R` (replay intro) | `Tab` (fullscreen) | `V` (camera preview) | `ESC` (quit).
