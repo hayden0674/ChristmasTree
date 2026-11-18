@@ -6,34 +6,56 @@ on:
 permissions:
   contents: write
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-          - os: macos-latest
-    runs-on: ${{ matrix.os }}
+  build-windows:
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: '3.11'
       - name: Install dependencies
         run: pip install pygame opencv-python mediapipe pyinstaller
       - name: Download hand model
         run: curl -L -o hand_landmarker.task https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task
       - name: Build Windows EXE
-        if: runner.os == "Windows"
         run: |
-          pyinstaller --noconfirm --onefile --windowed --collect-all mediapipe --name "ParticleChristmasTree" --add-data "hand_landmarker.task;." christmas_tree.py
-          powershell Compress-Archive -Path dist/ParticleChristmasTree.exe -DestinationPath ChristmasTree-Windows.zip
+          pyinstaller --noconfirm --onefile --windowed --collect-data mediapipe --name "ParticleChristmasTree" --add-data "hand_landmarker.task;." christmas_tree.py
+          Compress-Archive -Path dist/ParticleChristmasTree.exe -DestinationPath ChristmasTree-Windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: ChristmasTree-Windows.zip
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install pygame opencv-python mediapipe pyinstaller
+      - name: Download hand model
+        run: curl -L -o hand_landmarker.task https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task
       - name: Build macOS APP
-        if: runner.os == "macOS"
         run: |
-          pyinstaller --noconfirm --onedir --windowed --collect-all mediapipe --name "ParticleChristmasTree" --add-data "hand_landmarker.task:." christmas_tree.py
+          pyinstaller --noconfirm --onedir --windowed --collect-data mediapipe --name "ParticleChristmasTree" --add-data "hand_landmarker.task:." christmas_tree.py
           plutil -insert NSCameraUsageDescription -string "Used for real-time hand gesture control." dist/ParticleChristmasTree.app/Contents/Info.plist
           ditto -c -k --sequesterRsrc --keepParent dist/ParticleChristmasTree.app ChristmasTree-macOS.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-release
+          path: ChristmasTree-macOS.zip
+
+  publish-release:
+    needs: [build-windows, build-macos]
+    if: always() && (needs.build-windows.result == 'success' || needs.build-macos.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-release'
+          merge-multiple: true
       - name: Publish to Releases
         uses: softprops/action-gh-release@v2
         with:
