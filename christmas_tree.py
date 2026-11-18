@@ -7,6 +7,7 @@ import subprocess
 import sys
 import urllib.request
 import pygame
+import win_compat
 _orig_pg_flip = pygame.display.flip
 _bloom_dim_cache = None
 def _cinematic_bloom_flip():
