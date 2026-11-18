@@ -7,6 +7,65 @@ import subprocess
 import sys
 import urllib.request
 import pygame
+_orig_set_mode = pygame.display.set_mode
+def _ime_safe_set_mode(*args, **kwargs):
+    surf = _orig_set_mode(*args, **kwargs)
+    try:
+        pygame.key.stop_text_input()
+    except Exception:
+        pass
+    return surf
+pygame.display.set_mode = _ime_safe_set_mode
+import struct as _exif_struct
+def _get_jpeg_orientation(file_obj):
+    try:
+        if hasattr(file_obj, 'seek'):
+            file_obj.seek(0)
+            data = file_obj.read(65536)
+            file_obj.seek(0)
+        else:
+            with open(file_obj, 'rb') as f:
+                data = f.read(65536)
+        if not data.startswith(bytes.fromhex('ffd8')):
+            return 1
+        pos = 2
+        while pos + 4 <= len(data):
+            if data[pos] != 0xFF:
+                break
+            marker = data[pos + 1]
+            if marker in (0xD9, 0xDA):
+                break
+            seg_len = _exif_struct.unpack('>H', data[pos + 2:pos + 4])[0]
+            if marker == 0xE1 and data[pos + 4:pos + 10] == (b'Exif' + bytes(2)):
+                tiff = data[pos + 10:pos + 2 + seg_len]
+                endian = '<' if tiff[:2] == b'II' else ('>' if tiff[:2] == b'MM' else None)
+                if endian and len(tiff) >= 8:
+                    ifd_off = _exif_struct.unpack(endian + 'I', tiff[4:8])[0]
+                    if ifd_off + 2 <= len(tiff):
+                        cnt = _exif_struct.unpack(endian + 'H', tiff[ifd_off:ifd_off + 2])[0]
+                        for idx in range(cnt):
+                            ent = ifd_off + 2 + idx * 12
+                            if ent + 12 <= len(tiff):
+                                tag, typ, _, val = _exif_struct.unpack(endian + 'HHII', tiff[ent:ent + 12])
+                                if tag == 0x0112:
+                                    return _exif_struct.unpack(endian + 'H', tiff[ent + 8:ent + 10])[0] if typ == 3 else val
+                break
+            pos += 2 + seg_len
+    except Exception:
+        pass
+    return 1
+_orig_img_load = pygame.image.load
+def _exif_aware_image_load(file_obj, namehint=''):
+    orient = _get_jpeg_orientation(file_obj)
+    surf = _orig_img_load(file_obj, namehint) if namehint else _orig_img_load(file_obj)
+    if orient == 3:
+        surf = pygame.transform.rotate(surf, 180)
+    elif orient == 6:
+        surf = pygame.transform.rotate(surf, -90)
+    elif orient == 8:
+        surf = pygame.transform.rotate(surf, 90)
+    return surf
+pygame.image.load = _exif_aware_image_load
 import sys as _sys
 if _sys.platform == 'win32':
     try:
@@ -55,6 +114,29 @@ pygame.font.SysFont = _safe_sysfont
 
 try:
     import cv2
+    import sys as _cam_sys2
+    if _cam_sys2.platform == 'win32':
+        _real_vc = getattr(cv2, '_real_videocapture', cv2.VideoCapture)
+        cv2._real_videocapture = _real_vc
+        def _win_videocapture_v2(index=0, apiPreference=cv2.CAP_ANY):
+            if isinstance(index, int):
+                candidates = [index] + [i for i in (0, 1, 2) if i != index]
+                apis = [cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY] if apiPreference == cv2.CAP_ANY else [apiPreference, cv2.CAP_DSHOW, cv2.CAP_MSMF]
+                for api in apis:
+                    for idx in candidates:
+                        try:
+                            cap = _real_vc(idx, api)
+                            if cap is not None and cap.isOpened():
+                                for _ in range(5):
+                                    ret, frame = cap.read()
+                                    if ret and frame is not None and getattr(frame, 'size', 0) > 0:
+                                        return cap
+                            if cap is not None:
+                                cap.release()
+                        except Exception:
+                            pass
+            return _real_vc(index, apiPreference)
+        cv2.VideoCapture = _win_videocapture_v2
     import mediapipe as mp
     HAS_VISION = True
 except ImportError:
