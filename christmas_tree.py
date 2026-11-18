@@ -7,6 +7,27 @@ import subprocess
 import sys
 import urllib.request
 import pygame
+_orig_pg_flip = pygame.display.flip
+_bloom_dim_cache = None
+def _cinematic_bloom_flip():
+    global _bloom_dim_cache
+    try:
+        screen = pygame.display.get_surface()
+        if screen is not None:
+            w, h = screen.get_size()
+            if w >= 320 and h >= 240:
+                bw, bh = max(1, w // 6), max(1, h // 6)
+                small = pygame.transform.smoothscale(screen, (bw, bh))
+                halo = pygame.transform.smoothscale(small, (w, h))
+                if _bloom_dim_cache is None or _bloom_dim_cache.get_size() != (w, h):
+                    _bloom_dim_cache = screen.copy()
+                    _bloom_dim_cache.fill((66, 66, 66))
+                halo.blit(_bloom_dim_cache, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
+                screen.blit(halo, (0, 0), special_flags=pygame.BLEND_RGB_ADD)
+    except Exception:
+        pass
+    _orig_pg_flip()
+pygame.display.flip = _cinematic_bloom_flip
 _orig_set_mode = pygame.display.set_mode
 def _ime_safe_set_mode(*args, **kwargs):
     surf = _orig_set_mode(*args, **kwargs)
