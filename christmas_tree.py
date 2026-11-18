@@ -7,6 +7,25 @@ import subprocess
 import sys
 import urllib.request
 import pygame
+import sys as _sys
+if _sys.platform == 'win32':
+    try:
+        import ctypes as _ctypes
+        _ctypes.windll.shcore.SetProcessDpiAwareness(2)
+    except Exception:
+        try:
+            _ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
+_orig_pg_scale = pygame.transform.scale
+def _hd_pg_scale(surface, size, dest_surface=None):
+    if dest_surface is None and surface.get_bitsize() in (24, 32):
+        try:
+            return pygame.transform.smoothscale(surface, size)
+        except Exception:
+            pass
+    return _orig_pg_scale(surface, size, dest_surface) if dest_surface is not None else _orig_pg_scale(surface, size)
+pygame.transform.scale = _hd_pg_scale
 import os
 _orig_sysfont = pygame.font.SysFont
 def _safe_sysfont(name, size, bold=False, italic=False, constructor=None):
