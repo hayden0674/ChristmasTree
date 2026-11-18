@@ -217,7 +217,7 @@ class HandTracker:
                 with open(model_path, "wb") as f:
                     f.write(req.read())
 
-            base_options = mp_python.BaseOptions(model_asset_path=model_path)
+            base_options = mp_python.BaseOptions(model_asset_buffer=_read_mp_model_bytes(model_path))
             options = mp_vision.HandLandmarkerOptions(
                 base_options=base_options,
                 running_mode=mp_vision.RunningMode.IMAGE,
